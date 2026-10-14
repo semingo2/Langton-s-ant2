@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2匹のラングトンのアリ｜研究・解析サイト</title>
+<style>
+:root { color-scheme: light; --red:#d71920; --blue:#1264d8; --line:#d5d9df; --panel:#fff; --bg:#f2f4f7; }
+* { box-sizing:border-box; }
+body { margin:0; font-family:system-ui,-apple-system,"Yu Gothic",sans-serif; background:var(--bg); color:#20242a; }
+header { background:#172033; color:white; padding:16px 20px; }
+header h1 { margin:0 0 5px; font-size:clamp(20px,3vw,28px); }
+header p { margin:0; color:#d6deed; font-size:14px; }
+main { padding:14px; display:grid; gap:12px; max-width:1600px; margin:auto; }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; box-shadow:0 2px 8px #18243a0a; }
+h2 { font-size:17px; margin:0 0 12px; }
+.controls { display:flex; flex-wrap:wrap; align-items:center; gap:8px; }
+button,select,input { font:inherit; }
+button { border:1px solid #b8c0cc; border-radius:7px; background:#fff; padding:8px 12px; cursor:pointer; }
+button:hover { background:#eef2f8; }
+button.primary { background:#1c5dcc; border-color:#1c5dcc; color:#fff; }
+button:disabled { opacity:.5; cursor:not-allowed; }
+label { display:flex; align-items:center; gap:6px; font-size:14px; }
+input[type=number] { width:112px; padding:7px; border:1px solid #b8c0cc; border-radius:6px; }
+select { padding:7px; border:1px solid #b8c0cc; border-radius:6px; background:white; }
+input[type=range] { width:min(220px,45vw); }
+.small { color:#606a78; font-size:12px; }
+.badge { display:inline-block; padding:4px 8px; border-radius:99px; background:#edf1f6; font-size:12px; }
+#viewport { height:min(62vh,680px); min-height:340px; border:1px solid #9ea8b6; border-radius:8px; overflow:hidden; background:#fff; touch-action:none; }
+canvas { display:block; width:100%; height:100%; }
+.stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(155px,1fr)); gap:8px; }
+.stat { background:#f7f9fc; border:1px solid #e0e5ec; border-radius:8px; padding:10px; }
+.stat .name { color:#5c6675; font-size:12px; }
+.stat .value { font-size:20px; font-weight:700; margin-top:3px; overflow-wrap:anywhere; }
+.red { color:var(--red); } .blue { color:var(--blue); }
+.results { overflow:auto; }
+table { border-collapse:collapse; width:100%; font-size:14px; }
+th,td { border-bottom:1px solid #e0e5ec; padding:9px; text-align:left; white-space:nowrap; }
+th { background:#f5f7fa; }
+.notice { background:#fff8e6; border:1px solid #f0d89a; padding:10px; border-radius:8px; font-size:13px; line-height:1.55; }
+#log { white-space:pre-wrap; font:12px ui-monospace,monospace; background:#101722; color:#d9e5f7; padding:10px; border-radius:8px; max-height:170px; overflow:auto; }
+@media(max-width:700px) { main{padding:8px} .panel{padding:10px} #viewport{height:50vh;min-height:280px} }
+</style>
+</head>
+<body>
+<header>
+  <h1>🐜 2匹のラングトンのアリ｜研究・解析サイト</h1>
+  <p>ハイウェイ周期の検出・ループ検出・マス数の記録｜GitHub Pages対応・外部ライブラリ不要</p>
+</header>
+<main>
+  <section class="panel">
+    <h2>シミュレーション設定</h2>
+    <div class="controls">
+      <button id="runBtn" class="primary">開始</button>
+      <button id="stepBtn">1ステップ進む</button>
+      <button id="resetBtn">リセット</button>
+      <label>間隔（空きマス）<input id="spacing" type="number" min="0" step="1" value="0"></label>
+      <label class="red">アリ1の向き
+        <select id="dir1"><option value="0">上</option><option value="1">右</option><option value="2">下</option><option value="3">左</option></select>
+      </label>
+      <label class="blue">アリ2の向き
+        <select id="dir2"><option value="0">上</option><option value="1">右</option><option value="2">下</option><option value="3">左</option></select>
+      </label>
+      <label>マスサイズ
+        <select id="cellSize"><option value="5" selected>5 px</option><option value="10">10 px</option><option value="20">20 px</option></select>
+      </label>
+      <label>速度 <input id="speed" type="range" min="100" max="10000" step="100" value="1000"><b id="speedLabel">1000</b> step/s</label>
+    </div>
+    <p class="small">スクロールで盤面を移動（マスサイズは変化しません）。ドラッグでも移動できます。盤面は必要なマスだけを保存するため、固定の縦横サイズを設けていません。</p>
+  </section>
+
+  <section class="panel">
+    <div class="stats">
+      <div class="stat"><div class="name">ステップ数</div><div class="value" id="steps">0</div></div>
+      <div class="stat"><div class="name">現在の黒マス数</div><div class="value" id="blackCount">0</div></div>
+      <div class="stat"><div class="name">一度でも通ったマス数</div><div class="value" id="visitedCount">2</div></div>
+      <div class="stat"><div class="name">ハイウェイ検出</div><div class="value" id="highwayStatus">未検出</div></div>
+      <div class="stat"><div class="name">ループ検出</div><div class="value" id="loopStatus">未検出</div></div>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>盤面</h2>
+    <div id="viewport"><canvas id="board"></canvas></div>
+  </section>
+
+  <section class="panel">
+    <h2>研究用の自動解析</h2>
+    <div class="controls">
+      <label>ハイウェイ周期（歩）<input id="period" type="number" min="1" value="104"></label>
+      <label>連続確認回数<input id="cycles" type="number" min="2" value="20"></label>
+      <label>最大解析歩数<input id="maxSteps" type="number" min="1" step="10000" value="200000"></label>
+      <button id="analyzeBtn" class="primary">解析を開始</button>
+      <button id="stopAnalyzeBtn" disabled>解析を中止</button>
+      <button id="jsonBtn" disabled>JSONを保存</button>
+      <button id="csvBtn" disabled>CSVを保存</button>
+    </div>
+    <p class="small">自動解析は現在の盤面を引き継がず、設定した初期間隔・初期方向から新しく開始します。解析中は一括で計算し、一定間隔で画面を更新します。</p>
+    <div class="notice">
+      <b>検出の定義：</b>ハイウェイは、各アリの「向き」が指定周期（初期値104歩）前の向きと連続して一致した回数で判定します。ループは、両アリの絶対配置・相対座標・向きと盤面ハッシュが過去と一致した場合に検出します。ハッシュ方式には理論上の衝突可能性があります。
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>解析結果</h2>
+    <div class="results">
+      <table>
+        <thead><tr><th>項目</th><th>アリ1（赤）</th><th>アリ2（青）</th><th>全体</th></tr></thead>
+        <tbody id="resultTable">
+          <tr><td>ハイウェイ周期の開始歩数</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>20周期（設定回数）確認完了歩数</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>ハイウェイ経路マス数</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>ハイウェイ経路外の黒マス数</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>一度でも通ったマス数</td><td>—</td><td>—</td><td>—</td></tr>
+          <tr><td>ループ</td><td>—</td><td>—</td><td>—</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <h2 style="margin-top:14px">実行ログ</h2>
+    <div id="log">準備完了。設定して「解析を開始」を押してください。</div>
+  </section>
+</main>
+
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const canvas = $("board"), ctx = canvas.getContext("2d");
+const viewport = $("viewport");
+const DX = [0,1,0,-1], DY = [-1,0,1,0], DIRJA = ["上","右","下","左"];
+let ants, black, visited, stepCount, spacing=0, cellSize=5;
+let boardHash1=0, boardHash2=0;
+let viewX=0, viewY=0, running=false, raf=0, lastTime=0, accumulator=0;
+let analysisRunning=false, analysisCancel=false, lastReport=null;
+let stateSeen = new Map();
+let directions = [0,0];
+let highway = null, loop = null;
+let drag = false, dragX=0, dragY=0;
+
+function key(x,y){ return `${x},${y}`; }
+function parseKey(k){ const i=k.indexOf(","); return [Number(k.slice(0,i)),Number(k.slice(i+1))]; }
+function initialAnts(){
+  const distance = spacing + 1, x1 = -Math.floor(distance/2), x2=x1+distance;
+  ants = [{x:x1,y:0,d:directions[0]},{x:x2,y:0,d:directions[1]}];
+  visited = new Set([key(ants[0].x,ants[0].y),key(ants[1].x,ants[1].y)]);
+}
+function resize(){
+  const r=viewport.getBoundingClientRect(), dpr=Math.max(1,window.devicePixelRatio||1);
+  canvas.width=Math.floor(r.width*dpr); canvas.height=Math.floor(r.height*dpr);
+  canvas.style.width=r.width+"px"; canvas.style.height=r.height+"px";
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  draw();
+}
+function centerView(){
+  const w=viewport.clientWidth, h=viewport.clientHeight;
+  viewX=(ants[0].x+ants[1].x)/2-w/(2*cellSize);
+  viewY=(ants[0].y+ants[1].y)/2-h/(2*cellSize);
+  draw();
+}
+function reset(){
+  stopRun(); black=new Set(); boardHash1=0; boardHash2=0; stepCount=0; stateSeen=new Map(); highway=null; loop=null;
+  initialAnts(); stateSeen.set(stateKey(ants,black),0);
+  $("steps").textContent="0"; $("highwayStatus").textContent="未検出"; $("loopStatus").textContent="未検出";
+  $("blackCount").textContent="0"; $("visitedCount").textContent=visited.size;
+  $("resultTable").innerHTML=defaultRows(); centerView(); updateStats();
+}
+function defaultRows(){
+ return `<tr><td>ハイウェイ周期の開始歩数</td><td>—</td><td>—</td><td>—</td></tr>
+ <tr><td>設定周期の確認完了歩数</td><td>—</td><td>—</td><td>—</td></tr>
+ <tr><td>ハイウェイ経路マス数</td><td>—</td><td>—</td><td>—</td></tr>
+ <tr><td>ハイウェイ経路外の黒マス数</td><td>—</td><td>—</td><td>—</td></tr>
+ <tr><td>一度でも通ったマス数</td><td>—</td><td>—</td><td>—</td></tr>
+ <tr><td>ループ</td><td>—</td><td>—</td><td>—</td></tr>`;
+}
+function coordHash(x,y){
+  const text=`${x},${y}`;
+  let a=0x811c9dc5>>>0, b=0x9e3779b9>>>0;
+  for(let i=0;i<text.length;i++){
+    const c=text.charCodeAt(i);
+    a=Math.imul(a^c,0x01000193)>>>0;
+    b=Math.imul(b^c,0x85ebca6b)>>>0;
+  }
+  return [a,b];
+}
+function setCell(x,y,isBlack){
+  const k=key(x,y), was=black.has(k);
+  if(was===isBlack)return;
+  const [a,b]=coordHash(x,y);boardHash1^=a;boardHash2^=b;
+  if(isBlack)black.add(k);else black.delete(k);
+}
+function oneStep(state){
+  // 両方の移動元マスの色を変更前に読む。
+  const ops=state.ants.map(a=>{
+    const wasBlack=state.black.has(key(a.x,a.y));
+    return {x:a.x,y:a.y,d:wasBlack?(a.d+3)%4:(a.d+1)%4,newBlack:!wasBlack};
+  });
+  // 両方のマス更新・方向変更を反映してから前進。
+  for(let i=0;i<2;i++){setCellState(state,ops[i].x,ops[i].y,ops[i].newBlack);state.ants[i].d=ops[i].d;}
+  for(let i=0;i<2;i++){const a=state.ants[i];a.x+=DX[a.d];a.y+=DY[a.d];state.visited.add(key(a.x,a.y));}
+  state.steps++;
+  return ops;
+}
+function setCellState(st,x,y,b){
+ const k=key(x,y),was=st.black.has(k);if(was===b)return;
+ const [a,h]=coordHash(x,y);st.hash1=(st.hash1^a)>>>0;st.hash2=(st.hash2^h)>>>0;
+ if(b)st.black.add(k);else st.black.delete(k);
+}
+function stateKey(a,blackSet){
+  // 黒マスの追加・削除時にXOR更新した2本のハッシュを使い、毎歩の全盤面走査を避ける。
+  return `${a[0].x},${a[0].y}|${a[1].x-a[0].x},${a[1].y-a[0].y}|${a[0].d},${a[1].d}|${boardHash1>>>0},${boardHash2>>>0}`;
+}
+function draw(){
+ const w=viewport.clientWidth,h=viewport.clientHeight;
+ ctx.fillStyle="#fff";ctx.fillRect(0,0,w,h);
+ const sx=Math.floor(viewX), ex=Math.ceil(viewX+w/cellSize), sy=Math.floor(viewY), ey=Math.ceil(viewY+h/cellSize);
+ ctx.fillStyle="#222";
+ for(const k of black){const [x,y]=parseKey(k);if(x<sx||x>ex||y<sy||y>ey)continue;ctx.fillRect((x-viewX)*cellSize,(y-viewY)*cellSize,cellSize,cellSize);}
+ ctx.beginPath();ctx.strokeStyle=cellSize<=5?"#d4d7dc":"#b8bec8";ctx.lineWidth=1;
+ for(let x=sx;x<=ex;x++){const px=Math.round((x-viewX)*cellSize)+.5;ctx.moveTo(px,0);ctx.lineTo(px,h);}
+ for(let y=sy;y<=ey;y++){const py=Math.round((y-viewY)*cellSize)+.5;ctx.moveTo(0,py);ctx.lineTo(w,py);}
+ ctx.stroke();
+ ants.forEach((a,i)=>{
+   const px=(a.x-viewX)*cellSize, py=(a.y-viewY)*cellSize;
+   if(px+cellSize<0||py+cellSize<0||px>w||py>h)return;
+   const cx=px+cellSize/2,cy=py+cellSize/2,m=Math.max(.7,cellSize*.12),l=px+m,r=px+cellSize-m,t=py+m,b=py+cellSize-m;
+   ctx.fillStyle=i===0?"#d71920":"#1264d8";ctx.beginPath();
+   if(a.d===0){ctx.moveTo(cx,t);ctx.lineTo(r,b);ctx.lineTo(l,b);}
+   else if(a.d===1){ctx.moveTo(r,cy);ctx.lineTo(l,t);ctx.lineTo(l,b);}
+   else if(a.d===2){ctx.moveTo(cx,b);ctx.lineTo(l,t);ctx.lineTo(r,t);}
+   else{ctx.moveTo(l,cy);ctx.lineTo(r,b);ctx.lineTo(r,t);}
+   ctx.closePath();ctx.fill();ctx.strokeStyle="#fff";ctx.lineWidth=1;ctx.stroke();
+ });
+}
+function updateStats(){
+ $("steps").textContent=stepCount.toLocaleString();
+ $("blackCount").textContent=black.size.toLocaleString();
+ $("visitedCount").textContent=visited.size.toLocaleString();
+}
+function oneLiveStep(){
+ const state={ants,black,visited,steps:stepCount,hash1:boardHash1,hash2:boardHash2};oneStep(state);stepCount=state.steps;boardHash1=state.hash1;boardHash2=state.hash2;
+ // Live mode tracks state repeats for a visible loop alert. Full analysis is done separately.
+ const k=stateKey(ants,black);
+ if(stateSeen.has(k)){loop={first:stateSeen.get(k),repeat:stepCount,period:stepCount-stateSeen.get(k)};$("loopStatus").textContent=`${loop.period}歩周期`;}
+ else stateSeen.set(k,stepCount);
+ updateStats();draw();
+}
+function stopRun(){running=false;cancelAnimationFrame(raf);$("runBtn").textContent="開始";}
+function frame(now){
+ if(!running)return;
+ if(!lastTime)lastTime=now;
+ accumulator+=Math.min(now-lastTime,100);lastTime=now;
+ const interval=1000/Number($("speed").value);let n=0;
+ while(accumulator>=interval&&n<600){oneLiveStep();accumulator-=interval;n++;}
+ raf=requestAnimationFrame(frame);
+}
+function toggleRun(){if(running){stopRun();return;}running=true;lastTime=0;accumulator=0;$("runBtn").textContent="停止";raf=requestAnimationFrame(frame);}
+function log(msg){const el=$("log");el.textContent+=`\n${msg}`;el.scrollTop=el.scrollHeight;}
+function freshAnalysisState(){
+ const sp=Math.max(0,Math.floor(Number($("spacing").value)||0));
+ const dist=sp+1,x1=-Math.floor(dist/2);
+ return {ants:[{x:x1,y:0,d:Number($("dir1").value)},{x:x1+dist,y:0,d:Number($("dir2").value)}],
+   black:new Set(),visited:new Set([key(x1,0),key(x1+dist,0)]),steps:0,hash1:0,hash2:0};
+}
+const sig=(s)=>{let h=2166136261>>>0;for(let i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619)>>>0;return h.toString(16);};
+function makeAnalysisKey(st){
+ const a=st.ants;
+ return `${a[0].x},${a[0].y}|${a[1].x-a[0].x},${a[1].y-a[0].y}|${a[0].d},${a[1].d}|${st.hash1},${st.hash2}`;
+}
+async function runAnalysis(){
+ if(analysisRunning)return;
+ stopRun();analysisRunning=true;analysisCancel=false;
+ $("analyzeBtn").disabled=true;$("stopAnalyzeBtn").disabled=false;$("jsonBtn").disabled=true;$("csvBtn").disabled=true;
+ $("log").textContent="解析を開始しました。";
+ const period=Math.max(1,Math.floor(Number($("period").value)||104));
+ const cycles=Math.max(2,Math.floor(Number($("cycles").value)||20));
+ const maxSteps=Math.max(1,Math.floor(Number($("maxSteps").value)||200000));
+ const st=freshAnalysisState(), dirs=[[],[]], matchRun=[0,0], startCandidate=[null,null];
+ const highwayStart=[null,null], highwayConfirmed=[null,null], highwayCells=[new Set(),new Set()];
+ const positionHistory=[];
+ const seen=new Map([[makeAnalysisKey(st),0]]);
+ let loopResult=null, status="最大歩数到達";
+ // Cache start positions per step so the detected highway path can be marked retrospectively.
+ const sourceHistory=[];
+ const requiredMatches=period*(cycles-1);
+ let lastYield=performance.now();
+ while(st.steps<maxSteps){
+   if(analysisCancel){status="ユーザーによる中止";break;}
+   const sources=st.ants.map(a=>[a.x,a.y]);sourceHistory.push(sources);
+   oneStep(st);
+   for(let i=0;i<2;i++){
+     const d=st.ants[i].d;dirs[i].push(d);
+     const t=dirs[i].length-1;
+     if(t>=period&&dirs[i][t]===dirs[i][t-period]){
+       matchRun[i]++;
+       if(matchRun[i]===1)startCandidate[i]=t-period;
+     }else{matchRun[i]=0;startCandidate[i]=null;}
+     if(highwayStart[i]===null&&matchRun[i]>=requiredMatches){
+       highwayStart[i]=startCandidate[i]===null?Math.max(0,t-requiredMatches+1-period):startCandidate[i];
+       highwayConfirmed[i]=st.steps;
+       const from=Math.max(0,highwayStart[i]);
+       for(let j=from;j<sourceHistory.length;j++)highwayCells[i].add(key(...sourceHistory[j][i]));
+       log(`アリ${i+1}：104歩周期（設定${period}歩）を${cycles}回連続確認。周期開始の推定=${highwayStart[i]}歩、確認完了=${st.steps}歩`);
+     }else if(highwayStart[i]!==null){
+       // Continue recording path cells while the detected direction periodicity continues.
+       if(matchRun[i]>0)highwayCells[i].add(key(...sources[i]));
+     }
+   }
+   const k=makeAnalysisKey(st);
+   if(seen.has(k)){loopResult={first:seen.get(k),repeat:st.steps,period:st.steps-seen.get(k)};status="ループ検出";break;}
+   seen.set(k,st.steps);
+   if(highwayStart.every(v=>v!==null)){status="2匹ともハイウェイ周期を確認";break;}
+   if(st.steps%1000===0){
+     $("log").textContent=`解析中：${st.steps.toLocaleString()}歩 / ${maxSteps.toLocaleString()}歩\n黒マス ${st.black.size.toLocaleString()}、通過済み ${st.visited.size.toLocaleString()}\nアリ1の周期：${highwayStart[0]===null?"未検出":`開始${highwayStart[0]}歩`}\nアリ2の周期：${highwayStart[1]===null?"未検出":`開始${highwayStart[1]}歩`}`;
+   }
+   if(performance.now()-lastYield>35){await new Promise(resolve=>setTimeout(resolve,0));lastYield=performance.now();}
+ }
+ const union=new Set([...highwayCells[0],...highwayCells[1]]);
+ let outsideBlack=0;for(const k of st.black)if(!union.has(k))outsideBlack++;
+ lastReport={
+  status,steps:st.steps,settings:{spacing:Math.max(0,Math.floor(Number($("spacing").value)||0)),period,requiredCycles:cycles,maxSteps},
+  ants:st.ants.map((a,i)=>({ant:i+1,position:[a.x,a.y],direction:DIRJA[a.d],highwayStartStep:highwayStart[i],highwayConfirmedAt:highwayConfirmed[i],highwayCells:highwayCells[i].size})),
+  loop:loopResult,
+  statistics:{blackCells:st.black.size,highwayCellsUnion:union.size,blackCellsOutsideHighway:outsideBlack,everVisitedCells:st.visited.size},
+  notes:["盤面は黒マスのみを保存し、白マスは暗黙に白として扱う。","周期開始歩数は向き履歴の周期一致から推定。","ハイウェイ経路外の黒マスは、検出区間で記録した経路を除いた黒マス。","盤面ハッシュの衝突可能性はゼロではない。"]
+ };
+ // Display final analyzed board and center the view on its ants.
+ ants=st.ants;black=st.black;visited=st.visited;stepCount=st.steps;boardHash1=st.hash1;boardHash2=st.hash2;highway=highwayStart;loop=loopResult;
+ $("highwayStatus").textContent=highwayStart.every(v=>v!==null)?"2匹検出":highwayStart.some(v=>v!==null)?"片方検出":"未検出";
+ $("loopStatus").textContent=loopResult?`${loopResult.period}歩周期`:"未検出";
+ updateStats();centerView();renderReport(lastReport);
+ log(`解析終了：${status}。${st.steps.toLocaleString()}歩まで調べました。`);
+ $("jsonBtn").disabled=false;$("csvBtn").disabled=false;
+ analysisRunning=false;$("analyzeBtn").disabled=false;$("stopAnalyzeBtn").disabled=true;
+}
+function renderReport(r){
+ const a1=r.ants[0],a2=r.ants[1],fmt=v=>v===null?"未検出":Number(v).toLocaleString();
+ $("resultTable").innerHTML=`
+ <tr><td>ハイウェイ周期の開始歩数（推定）</td><td class="red">${fmt(a1.highwayStartStep)}</td><td class="blue">${fmt(a2.highwayStartStep)}</td><td>—</td></tr>
+ <tr><td>周期確認完了歩数</td><td>${fmt(a1.highwayConfirmedAt)}</td><td>${fmt(a2.highwayConfirmedAt)}</td><td>—</td></tr>
+ <tr><td>ハイウェイ経路マス数</td><td>${a1.highwayCells.toLocaleString()}</td><td>${a2.highwayCells.toLocaleString()}</td><td>${r.statistics.highwayCellsUnion.toLocaleString()}</td></tr>
+ <tr><td>ハイウェイ経路外の黒マス数</td><td>—</td><td>—</td><td>${r.statistics.blackCellsOutsideHighway.toLocaleString()}</td></tr>
+ <tr><td>一度でも通ったマス数</td><td>—</td><td>—</td><td>${r.statistics.everVisitedCells.toLocaleString()}</td></tr>
+ <tr><td>ループ</td><td colspan="3">${r.loop?`初回 ${r.loop.first}歩、再出現 ${r.loop.repeat}歩、周期 ${r.loop.period}歩`:"検出されず"}</td></tr>`;
+}
+function download(name,content,type){
+ const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement("a");
+ a.href=url;a.download=name;a.click();URL.revokeObjectURL(url);
+}
+function toCSV(r){
+ const rows=[["category","item","value"],["summary","status",r.status],["summary","steps",r.steps]];
+ r.ants.forEach(a=>{rows.push(["ant"+a.ant,"highway_start_step",a.highwayStartStep??""]);rows.push(["ant"+a.ant,"confirmed_at_step",a.highwayConfirmedAt??""]);rows.push(["ant"+a.ant,"highway_cells",a.highwayCells]);rows.push(["ant"+a.ant,"position",a.position.join(" ")])});
+ for(const [k,v] of Object.entries(r.statistics))rows.push(["statistics",k,v]);
+ if(r.loop)for(const [k,v] of Object.entries(r.loop))rows.push(["loop",k,v]);
+ return rows.map(row=>row.map(v=>`"${String(v).replaceAll('"','""')}"`).join(",")).join("\r\n");
+}
+$("runBtn").addEventListener("click",toggleRun);
+$("stepBtn").addEventListener("click",()=>{stopRun();oneLiveStep();});
+$("resetBtn").addEventListener("click",reset);
+$("spacing").addEventListener("input",()=>{
+ let v=Math.max(0,Math.floor(Number($("spacing").value)||0));$("spacing").value=v;spacing=v;
+ if(analysisRunning)return;
+ stopRun();reset();
+});
+$("dir1").addEventListener("change",()=>{directions[0]=Number($("dir1").value);ants[0].d=directions[0];draw();});
+$("dir2").addEventListener("change",()=>{directions[1]=Number($("dir2").value);ants[1].d=directions[1];draw();});
+$("cellSize").addEventListener("change",()=>{cellSize=Number($("cellSize").value);resize();centerView();});
+$("speed").addEventListener("input",()=>{$("speedLabel").textContent=Number($("speed").value).toLocaleString();});
+$("analyzeBtn").addEventListener("click",runAnalysis);
+$("stopAnalyzeBtn").addEventListener("click",()=>{analysisCancel=true;});
+$("jsonBtn").addEventListener("click",()=>{if(lastReport)download("langtons-ant-report.json",JSON.stringify(lastReport,null,2),"application/json");});
+$("csvBtn").addEventListener("click",()=>{if(lastReport)download("langtons-ant-report.csv",toCSV(lastReport),"text/csv;charset=utf-8");});
+viewport.addEventListener("wheel",e=>{e.preventDefault();let dx=e.deltaX,dy=e.deltaY;if(e.shiftKey&&dx===0){dx=dy;dy=0;}viewX+=dx/cellSize;viewY+=dy/cellSize;draw();},{passive:false});
+viewport.addEventListener("pointerdown",e=>{drag=true;dragX=e.clientX;dragY=e.clientY;viewport.setPointerCapture(e.pointerId);});
+viewport.addEventListener("pointermove",e=>{if(!drag)return;const dx=e.clientX-dragX,dy=e.clientY-dragY;dragX=e.clientX;dragY=e.clientY;viewX-=dx/cellSize;viewY-=dy/cellSize;draw();});
+viewport.addEventListener("pointerup",()=>drag=false);
+viewport.addEventListener("pointercancel",()=>drag=false);
+window.addEventListener("resize",resize);
+reset();resize();
+})();
+</script>
+</body>
+</html>
